@@ -56,7 +56,7 @@ class ReaderController extends GetxController {
   RxBool showBar = false.obs;
 
   bool get isDualPage => switch (readerSettingsState.value.dualPageMode) {
-    DualPageMode.auto => Get.context!.isLargeScreen(),
+    DualPageMode.auto => Get.context!.shouldAutoUseDualPage(),
     DualPageMode.enabled => true,
     DualPageMode.disabled => false,
   };
@@ -65,6 +65,7 @@ class ReaderController extends GetxController {
 
   ///当前页面，横向用
   RxInt currentIndex = 0.obs;
+  int initialHorizontalIndex = 0;
 
   RxInt horizontalProgress = 0.obs;
 
@@ -73,6 +74,7 @@ class ReaderController extends GetxController {
 
   ///阅读位置，竖向用
   RxInt currentLocation = 0.obs;
+  int initialVerticalOffset = 0;
 
   ///竖向模式下，显示当前阅读进度的百分比
   RxInt verticalProgress = 0.obs;
@@ -158,16 +160,20 @@ class ReaderController extends GetxController {
       try {
         int value = int.parse(Get.parameters["location"]!);
         currentLocation.value = value;
+        initialVerticalOffset = value;
         return value;
       } catch (_) {
+        initialVerticalOffset = 0;
         return 0;
       }
     } else {
       try {
         int value = int.parse(Get.parameters["location"]!);
         currentIndex.value = value;
+        initialHorizontalIndex = value;
         return value;
       } catch (_) {
+        initialHorizontalIndex = 0;
         return 0;
       }
     }

@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 
 import '../../../network/request.dart';
 import 'paper_curl_pager.dart';
@@ -73,7 +72,8 @@ class _HorizontalReadPageState extends State<HorizontalReadPage> with WidgetsBin
   @override
   void initState() {
     super.initState();
-    lastSize = Get.size;
+    index = widget.initIndex;
+    lastSize = _currentViewSize();
     _lastLayoutSig = _layoutSignature();
     WidgetsBinding.instance.addObserver(this);
     resetPage();
@@ -87,10 +87,18 @@ class _HorizontalReadPageState extends State<HorizontalReadPage> with WidgetsBin
 
   @override
   void didChangeMetrics() {
-    if (lastSize != Get.size) {
-      lastSize = Get.size;
-      resetPage();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final newSize = _currentViewSize();
+      if (lastSize != newSize) {
+        lastSize = newSize;
+        final newSig = _layoutSignature();
+        if (newSig != _lastLayoutSig) {
+          _lastLayoutSig = newSig;
+          resetPage();
+        }
+      }
+    });
   }
 
   void resetPage() {
@@ -98,9 +106,10 @@ class _HorizontalReadPageState extends State<HorizontalReadPage> with WidgetsBin
     textStyle = widget.style;
     images = List<String>.from(widget.images); //转换为纯净的List<String>
     padding = widget.padding;
-    pageWidth = (Get.width - padding.left - padding.right).floorToDouble();
+    final size = _currentViewSize();
+    pageWidth = (size.width - padding.left - padding.right).floorToDouble();
     pageWidth = widget.isDualPage ? (pageWidth - widget.dualPageSpacing * 2) / 2 : pageWidth;
-    pageHeight = Get.height - padding.top - padding.bottom;
+    pageHeight = size.height - padding.top - padding.bottom;
     if (text.isEmpty && images.isEmpty) {
       index = 0;
       setState(() {
@@ -134,8 +143,9 @@ class _HorizontalReadPageState extends State<HorizontalReadPage> with WidgetsBin
       return;
     }
 
-    if (oldWidget.pageTurningAnimation != widget.pageTurningAnimation || oldWidget.isDualPage != widget.isDualPage || oldWidget.initIndex != widget.initIndex) {
-      final target = (widget.initIndex.clamp(0, _pageCount() <= 0 ? 0 : _pageCount() - 1) as num).toInt();
+    if (oldWidget.pageTurningAnimation != widget.pageTurningAnimation || oldWidget.isDualPage != widget.isDualPage) {
+      final rawTarget = oldWidget.isDualPage == widget.isDualPage ? index : _convertIndexBetweenPageModes(index, oldWidget.isDualPage, widget.isDualPage);
+      final target = (rawTarget.clamp(0, _pageCount() <= 0 ? 0 : _pageCount() - 1) as num).toInt();
       index = target;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -199,6 +209,11 @@ class _HorizontalReadPageState extends State<HorizontalReadPage> with WidgetsBin
         itemBuilder: (_, i) => _buildPage(i),
       ),
     );
+  }
+
+  int _convertIndexBetweenPageModes(int value, bool fromDualPage, bool toDualPage) {
+    if (fromDualPage == toDualPage) return value;
+    return toDualPage ? value ~/ 2 : value * 2;
   }
 
   int _pageCount() {
@@ -413,10 +428,11 @@ class _HorizontalReadPageState extends State<HorizontalReadPage> with WidgetsBin
     setState(() {}); //刷新UI
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = (index.clamp(0, _pageCount() <= 0 ? 0 : _pageCount() - 1) as num).toInt();
       if (widget.pageTurningAnimation) {
-        widget.paperCurlController?.jumpToPage((widget.initIndex.clamp(0, _pageCount() <= 0 ? 0 : _pageCount() - 1) as num).toInt());
+        widget.paperCurlController?.jumpToPage(target);
       } else {
-        widget.controller.jumpToPage((widget.initIndex.clamp(0, _pageCount() <= 0 ? 0 : _pageCount() - 1) as num).toInt());
+        widget.controller.jumpToPage(target);
       }
     });
   }
@@ -523,14 +539,18 @@ class _HorizontalReadPageState extends State<HorizontalReadPage> with WidgetsBin
     return painter.size;
   }
 
-  //排版几何参数的签名
   String _layoutSignature() {
     final s = widget.style;
     final p = widget.padding;
+    final size = _currentViewSize();
 
     return [
       widget.text.length,
       widget.images.length,
+      widget.isDualPage,
+      widget.dualPageSpacing,
+      size.width,
+      size.height,
       s.fontSize,
       s.height,
       s.letterSpacing,
@@ -541,6 +561,15 @@ class _HorizontalReadPageState extends State<HorizontalReadPage> with WidgetsBin
       p.top,
       p.bottom,
     ].join("|");
+  }
+
+  Size _currentViewSize() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isNotEmpty) {
+      final view = views.first;
+      return view.physicalSize / view.devicePixelRatio;
+    }
+    return const Size(0, 0);
   }
 }
 
