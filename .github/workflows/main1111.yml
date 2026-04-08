@@ -1,0 +1,51 @@
+name: Build APK
+# 👇 必须保留这个on块，定义触发事件
+on:
+  workflow_dispatch:  # 允许手动在Actions页面点击运行（核心）
+  push:
+    branches: [ main ]  # 可选：推送到main分支自动运行
+
+# 👇 以下是完整的工作流配置（可直接替换）
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Configure mirrors
+        run: |
+          echo "PUB_HOSTED_URL=https://pub.flutter-io.cn" >> $GITHUB_ENV
+          echo "FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn" >> $GITHUB_ENV
+          echo "GRADLE_USER_HOME=${{ runner.temp }}/gradle_home" >> $GITHUB_ENV
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check code format
+        run: flutter format --set-exit-if-changed .
+
+      - name: Run Flutter analyze
+        run: flutter analyze --no-pub --no-fatal-infos
+
+      - name: Build APK
+        run: flutter build apk --release --verbose
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
