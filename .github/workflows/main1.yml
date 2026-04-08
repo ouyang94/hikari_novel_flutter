@@ -1,0 +1,52 @@
+name: Build APK
+# 允许手动触发，同时支持推送到main分支自动触发（可选）
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+# 权限声明，确保产物上传等操作正常
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. 配置Flutter环境（带缓存，大幅加速构建）
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+          cache: true  # 开启缓存，避免重复下载SDK
+
+      # 3. 安装依赖（带缓存，加速后续构建）
+      - name: Install dependencies
+        run: flutter pub get
+        env:
+          PUB_CACHE: ${{ runner.temp }}/pub_cache
+
+      # 4. 代码格式检查（提前发现格式问题）
+      - name: Check code format
+        run: flutter format --set-exit-if-changed .
+
+      # 5. 静态代码分析（提前发现语法/逻辑问题）
+      - name: Run Flutter analyze
+        run: flutter analyze --no-pub --no-fatal-infos
+
+      # 6. 构建Release版APK
+      - name: Build APK
+        run: flutter build apk --release --verbose
+
+      # 7. 上传APK产物
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30  # 产物保留30天，避免过期无法下载
