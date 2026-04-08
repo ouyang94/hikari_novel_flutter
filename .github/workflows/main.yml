@@ -1,0 +1,57 @@
+name: Build APK
+on:
+  workflow_dispatch:  # 手动触发，按需打包
+
+# 显式声明权限，符合GitHub安全规范
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # 强制使用Node.js 24，立即消除弃用警告
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      # 1. 检出代码（升级到v5，支持Node.js 24）
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # 2. 配置国内镜像（解决网络问题，必加）
+      - name: Configure mirrors
+        run: |
+          echo "PUB_HOSTED_URL=https://pub.flutter-io.cn" >> $GITHUB_ENV
+          echo "FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn" >> $GITHUB_ENV
+          echo "GRADLE_USER_HOME=${{ runner.temp }}/gradle_home" >> $GITHUB_ENV
+
+      # 3. 配置Flutter环境（开启缓存，大幅加速）
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'  # 与你本地版本一致
+          channel: 'stable'
+          cache: true  # 缓存SDK，避免重复下载
+
+      # 4. 安装依赖
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 5. 代码格式检查（提前拦截问题）
+      - name: Check code format
+        run: flutter format --set-exit-if-changed .
+
+      # 6. 静态代码分析
+      - name: Run Flutter analyze
+        run: flutter analyze --no-pub --no-fatal-infos
+
+      # 7. 构建Release版APK（--verbose输出详细日志，方便排障）
+      - name: Build APK
+        run: flutter build apk --release --verbose
+
+      # 8. 上传APK产物（升级到v5，支持Node.js 24）
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30  # 产物保留30天
